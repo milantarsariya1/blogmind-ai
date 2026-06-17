@@ -37,7 +37,7 @@ export default function Navbar() {
           : "bg-transparent py-5"
       }`}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12">
         <div className="flex items-center justify-between h-12">
           {/* Logo */}
           <div className="flex-shrink-0">
@@ -59,6 +59,16 @@ export default function Navbar() {
               }`}
             >
               Home
+            </Link>
+            <Link
+              to="/explore"
+              className={`text-sm font-semibold transition-colors duration-200 ${
+                isActive("/explore")
+                  ? "text-indigo-600 dark:text-indigo-400 font-bold"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+              }`}
+            >
+              Explore
             </Link>
             <Link
               to="/dashboard"
@@ -83,14 +93,18 @@ export default function Navbar() {
                   <FileText className="w-4 h-4" />
                   <span>Write Post</span>
                 </Link>
-                <div className="flex items-center space-x-2 bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50">
+                <Link
+                  to="/settings"
+                  className="flex items-center space-x-2 bg-slate-100 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200/50 dark:border-slate-800/50 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                  title="Profile Settings"
+                >
                   <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold text-sm">
-                    {currentUser.name.charAt(0)}
+                    {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                   <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                     {currentUser.name}
                   </span>
-                </div>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="p-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-900 transition-colors"
@@ -144,6 +158,17 @@ export default function Navbar() {
             Home
           </Link>
           <Link
+            to="/explore"
+            onClick={() => setIsOpen(false)}
+            className={`block px-3 py-2 rounded-xl text-base font-medium transition-colors ${
+              isActive("/explore")
+                ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-400 font-bold"
+                : "text-slate-700 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
+            }`}
+          >
+            Explore
+          </Link>
+          <Link
             to="/dashboard"
             onClick={() => setIsOpen(false)}
             className={`block px-3 py-2 rounded-xl text-base font-medium transition-colors ${
@@ -158,9 +183,13 @@ export default function Navbar() {
           <div className="pt-4 pb-2 border-t border-slate-200 dark:border-slate-800 mt-2">
             {currentUser ? (
               <div className="space-y-2">
-                <div className="flex items-center px-3 py-2">
+                <Link
+                  to="/settings"
+                  onClick={() => setIsOpen(false)}
+                  className="flex items-center px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-900 rounded-xl transition-colors"
+                >
                   <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold mr-3">
-                    {currentUser.name.charAt(0)}
+                    {currentUser.name.charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -168,7 +197,7 @@ export default function Navbar() {
                     </div>
                     <div className="text-xs text-slate-500">{currentUser.email}</div>
                   </div>
-                </div>
+                </Link>
                 <Link
                   to="/create-post"
                   onClick={() => setIsOpen(false)}

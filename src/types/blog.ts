@@ -11,4 +11,6 @@ export interface BlogPost {
   updatedAt: string;
   readingTime: number;
   views: number;
+  reportCount?: number;
+  reportReasons?: string[];
 }

@@ -14,6 +14,7 @@ interface BlogContextType {
   currentUser: User | null;
   login: (user: User) => void;
   logout: () => void;
+  updateCurrentUser: (updatedFields: Partial<User>) => void;
 }
 
 const BlogContext = createContext<BlogContextType | undefined>(undefined);
@@ -87,6 +88,13 @@ export default function App() {
     setCurrentUser(null);
   };
 
+  const updateCurrentUser = (updatedFields: Partial<User>) => {
+    setCurrentUser((prev) => {
+      if (!prev) return null;
+      return { ...prev, ...updatedFields };
+    });
+  };
+
   return (
     <BlogContext.Provider
       value={{
@@ -97,6 +105,7 @@ export default function App() {
         currentUser,
         login,
         logout,
+        updateCurrentUser,
       }}
     >
       <BrowserRouter>

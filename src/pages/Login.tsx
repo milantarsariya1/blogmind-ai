@@ -45,7 +45,7 @@ export default function Login() {
       navigate("/dashboard");
     } else {
       setErrors({
-        general: "Invalid email or password. Try admin@blogmind.ai with password123",
+        general: "Invalid email or password.",
       });
     }
   };

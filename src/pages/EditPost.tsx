@@ -27,11 +27,21 @@ import {
 
 export default function EditPost() {
   const { id } = useParams();
-  const { posts, updatePost } = useBlog();
+  const { posts, updatePost, currentUser } = useBlog();
   const navigate = useNavigate();
 
   // Find the target post
   const post = posts.find((p) => p.id === id);
+
+  // Access control guard: prevent editing other authors' posts
+  useEffect(() => {
+    if (post && currentUser) {
+      if (post.author.toLowerCase() !== currentUser.name.toLowerCase()) {
+        alert("Access denied: You do not have permission to edit articles written by other creators.");
+        navigate("/dashboard");
+      }
+    }
+  }, [post, currentUser, navigate]);
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");

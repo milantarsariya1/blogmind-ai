@@ -1,17 +1,27 @@
+import { useState, useMemo } from "react";
 import { useBlog } from "../App";
 import { Link } from "react-router-dom";
-import { Plus, Edit3, Trash2, FileText, BarChart2, BookOpen } from "lucide-react";
+import { Plus, Edit3, Trash2, BookOpen, FileText, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDate } from "../utils/formatDate";
 import EmptyState from "../components/EmptyState";
 
 export default function Dashboard() {
   const { posts, deletePost, currentUser } = useBlog();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const postsPerPage = 10;
 
-  // Calculate stats
-  const totalPosts = posts.length;
-  const draftPosts = posts.filter((p) => p.status === "draft").length;
-  const publishedPosts = posts.filter((p) => p.status === "published").length;
-  const totalViews = posts.reduce((sum, p) => sum + (p.views || 0), 0);
+  // Filter posts to show ONLY the currently logged-in user's posts
+  const userPosts = useMemo(() => {
+    if (!currentUser) return [];
+    return posts.filter(
+      (p) => p.author.toLowerCase() === currentUser.name.toLowerCase()
+    );
+  }, [posts, currentUser]);
+
+  // Calculate stats based on user's own posts
+  const totalPosts = userPosts.length;
+  const publishedPosts = userPosts.filter((p) => p.status === "published").length;
 
   const handleDelete = (id: string, title: string) => {
     if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
@@ -19,8 +29,32 @@ export default function Dashboard() {
     }
   };
 
+  // Filter posts based on search query
+  const filteredPosts = useMemo(() => {
+    return userPosts.filter((post) => {
+      const query = searchQuery.toLowerCase();
+      return (
+        post.title.toLowerCase().includes(query) ||
+        post.author.toLowerCase().includes(query) ||
+        post.tags.some((t) => t.toLowerCase().includes(query))
+      );
+    });
+  }, [userPosts, searchQuery]);
+
+  // Reset page when search changes
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  // Calculate paginated posts
+  const totalPages = Math.ceil(filteredPosts.length / postsPerPage);
+  const paginatedPosts = useMemo(() => {
+    const startIndex = (currentPage - 1) * postsPerPage;
+    return filteredPosts.slice(startIndex, startIndex + postsPerPage);
+  }, [filteredPosts, currentPage]);
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+    <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 space-y-8">
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -28,7 +62,7 @@ export default function Dashboard() {
             Creator Dashboard
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Welcome back, <span className="font-bold text-slate-700 dark:text-slate-200">{currentUser?.name}</span>. Manage your drafts and publications.
+            Welcome back, <span className="font-bold text-slate-700 dark:text-slate-200">{currentUser?.name}</span>. Manage your publications.
           </p>
         </div>
         <Link
@@ -41,7 +75,7 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Section */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Stat 1 */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 p-5 rounded-2xl flex items-center space-x-4">
           <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl animate-pulse">
@@ -62,47 +96,37 @@ export default function Dashboard() {
             <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-0.5">{publishedPosts}</h3>
           </div>
         </div>
-        {/* Stat 3 */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 p-5 rounded-2xl flex items-center space-x-4">
-          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-xl">
-            <Edit3 className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Drafts</p>
-            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-0.5">{draftPosts}</h3>
-          </div>
-        </div>
-        {/* Stat 4 */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 p-5 rounded-2xl flex items-center space-x-4">
-          <div className="p-3 bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 rounded-xl">
-            <BarChart2 className="w-6 h-6" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Views</p>
-            <h3 className="text-2xl font-bold text-slate-800 dark:text-white mt-0.5">{totalViews.toLocaleString()}</h3>
-          </div>
-        </div>
+      </div>
+
+      {/* Search Section */}
+      <div className="relative max-w-md">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search posts by title, author, or tags..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600 transition-all duration-200 text-slate-700 dark:text-slate-200"
+        />
       </div>
 
       {/* Table Section */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-3xl overflow-hidden shadow-xs">
-        {posts.length > 0 ? (
+        {paginatedPosts.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/80">
                   <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Post Title</th>
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Status</th>
                   <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Author</th>
                   <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Date</th>
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Views</th>
                   <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {posts.map((post) => (
+                {paginatedPosts.map((post) => (
                   <tr key={post.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/20 transition-colors">
-                    <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-200 max-w-xs sm:max-w-sm truncate">
+                    <td className="px-6 py-5 font-semibold text-slate-800 dark:text-slate-200 max-w-xs sm:max-w-sm truncate">
                       {post.status === "published" ? (
                         <Link to={`/post/${post.id}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
                           {post.title}
@@ -111,35 +135,23 @@ export default function Dashboard() {
                         <span className="text-slate-500">{post.title}</span>
                       )}
                     </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                          post.status === "published"
-                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/40"
-                            : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 border border-amber-100 dark:border-amber-900/40"
-                        }`}
-                      >
-                        {post.status === "published" ? "Published" : "Draft"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-500 dark:text-slate-400">{post.author}</td>
-                    <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">{formatDate(post.createdAt)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono">{post.views.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-sm">
+                    <td className="px-6 py-5 text-sm font-medium text-slate-500 dark:text-slate-400">{post.author}</td>
+                    <td className="px-6 py-5 text-sm text-slate-500 dark:text-slate-400">{formatDate(post.createdAt)}</td>
+                    <td className="px-6 py-5 text-right text-sm">
                       <div className="flex items-center justify-end space-x-1.5">
                         <Link
                           to={`/edit-post/${post.id}`}
                           className="p-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
                           title="Edit Post"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-4.5 h-4.5" />
                         </Link>
                         <button
                           onClick={() => handleDelete(post.id, post.title)}
                           className="p-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
                           title="Delete Post"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-4.5 h-4.5" />
                         </button>
                       </div>
                     </td>
@@ -151,19 +163,66 @@ export default function Dashboard() {
         ) : (
           <EmptyState
             title="No Posts Found"
-            description="You haven't written any posts yet. Get started by drafting your first blog post using our rich text editor."
+            description={searchQuery ? "No posts match your search query." : "You haven't written any posts yet. Get started by drafting your first blog post using our rich text editor."}
             action={
-              <Link
-                to="/create-post"
-                className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Write Your First Post</span>
-              </Link>
+              !searchQuery ? (
+                <Link
+                  to="/create-post"
+                  className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Write Your First Post</span>
+                </Link>
+              ) : (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Clear Search Filter
+                </button>
+              )
             }
           />
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center pt-4 space-x-2">
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+          >
+            <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          </button>
+          <div className="flex items-center space-x-1.5">
+            {Array.from({ length: totalPages }).map((_, idx) => {
+              const pageNum = idx + 1;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-9 h-9 rounded-xl font-semibold text-sm cursor-pointer transition-all ${
+                    currentPage === pageNum
+                      ? "bg-indigo-600 text-white shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-900"
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="p-2 border border-slate-200 dark:border-slate-800 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-900 disabled:opacity-40 disabled:hover:bg-transparent transition-all cursor-pointer"
+          >
+            <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

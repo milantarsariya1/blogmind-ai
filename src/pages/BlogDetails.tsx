@@ -1,13 +1,18 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useBlog } from "../App";
-import { Clock, Eye, Calendar, ArrowLeft, BookOpen } from "lucide-react";
+import { Clock, Eye, Calendar, ArrowLeft, BookOpen, Flag } from "lucide-react";
 import { formatDate } from "../utils/formatDate";
 
 export default function BlogDetails() {
   const { id } = useParams();
-  const { posts, updatePost } = useBlog();
+  const { posts, updatePost, deletePost } = useBlog();
   const navigate = useNavigate();
+
+  // Report state
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("irrelevant");
+  const [customReason, setCustomReason] = useState("");
 
   // Find target post
   const post = posts.find((p) => p.id === id);
@@ -42,6 +47,43 @@ export default function BlogDetails() {
     return candidates.slice(0, 3);
   }, [post, posts]);
 
+  const handleReportSubmit = (simulateMax: boolean = false) => {
+    if (!post) return;
+    
+    let finalReason = reportReason;
+    if (reportReason === "other") {
+      if (!customReason.trim()) {
+        alert("Please describe the issue before submitting.");
+        return;
+      }
+      finalReason = customReason.trim();
+    }
+
+    const currentCount = post.reportCount || 0;
+    const countToAdd = simulateMax ? 8 : 1;
+    const newReportCount = currentCount + countToAdd;
+    
+    const existingReasons = post.reportReasons || [];
+    const newReasons = [...existingReasons, finalReason];
+
+    setIsReportModalOpen(false);
+
+    if (newReportCount > 7) {
+      deletePost(post.id);
+      alert("This post has been automatically removed from the site as it has received more than 7 reports from the community.");
+      navigate("/");
+    } else {
+      updatePost(post.id, {
+        reportCount: newReportCount,
+        reportReasons: newReasons,
+      });
+      alert(`Report submitted successfully! The content is now under review. (Current reports: ${newReportCount}/8)`);
+    }
+
+    setReportReason("irrelevant");
+    setCustomReason("");
+  };
+
   if (!post) {
     return (
       <div className="max-w-md mx-auto text-center py-20 space-y-4">
@@ -62,7 +104,7 @@ export default function BlogDetails() {
       {/* Glow Orbs */}
       <div className="glow-bg bg-indigo-500/5 dark:bg-indigo-500/2 w-[500px] h-[500px] -top-96 left-1/4" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-8 lg:px-12 relative z-10">
         {/* Back Link */}
         <button
           onClick={() => navigate(-1)}
@@ -146,6 +188,21 @@ export default function BlogDetails() {
               className="rich-content prose max-w-none pt-4"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
+
+            {/* Report Content Panel */}
+            <div className="border-t border-slate-200/50 dark:border-slate-800/60 pt-6 mt-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Flag this article?</h4>
+                <p className="text-xs text-slate-500">If you find this content inappropriate, abusive, or irrelevant, please let us know.</p>
+              </div>
+              <button
+                onClick={() => setIsReportModalOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-4.5 py-2.5 text-xs font-semibold text-red-650 hover:text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/40 rounded-xl transition-all border border-red-200/40 dark:border-red-900/40 cursor-pointer self-start sm:self-auto shadow-2xs"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>Report Content</span>
+              </button>
+            </div>
           </article>
 
           {/* Related Posts Sidebar Column (Right) */}
@@ -186,6 +243,114 @@ export default function BlogDetails() {
           </aside>
         </div>
       </div>
+
+      {/* Report Modal */}
+      {isReportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-3xl p-6 max-w-md w-full space-y-6 shadow-xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <Flag className="w-5 h-5 text-red-500" />
+                <span>Report Blog Post</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsReportModalOpen(false);
+                  setReportReason("irrelevant");
+                  setCustomReason("");
+                }}
+                className="text-slate-400 hover:text-slate-650 dark:hover:text-slate-250 cursor-pointer p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Help us keep our community safe and clean. Select a reason why you are reporting this article:
+              </p>
+
+              <div className="space-y-3">
+                <label className="flex items-start space-x-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 cursor-pointer transition-all">
+                  <input
+                    type="radio"
+                    name="reportReason"
+                    value="irrelevant"
+                    checked={reportReason === "irrelevant"}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="mt-0.5 text-indigo-650 focus:ring-indigo-550 w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-250 block">Irrelevant Content</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Off-topic, spam, ads, or content not matching our publishing goals.</span>
+                  </div>
+                </label>
+
+                <label className="flex items-start space-x-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 cursor-pointer transition-all">
+                  <input
+                    type="radio"
+                    name="reportReason"
+                    value="abusive"
+                    checked={reportReason === "abusive"}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="mt-0.5 text-indigo-650 focus:ring-indigo-550 w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-250 block">Abusive Content</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Hateful, violent, harassment, or violates our terms of conduct.</span>
+                  </div>
+                </label>
+
+                <label className="flex items-start space-x-3 p-3 rounded-xl border border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-950/40 cursor-pointer transition-all">
+                  <input
+                    type="radio"
+                    name="reportReason"
+                    value="other"
+                    checked={reportReason === "other"}
+                    onChange={(e) => setReportReason(e.target.value)}
+                    className="mt-0.5 text-indigo-650 focus:ring-indigo-550 w-4 h-4"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-250 block">Other Reason</span>
+                    <span className="text-[10px] text-slate-500 block mt-0.5">Describe the issue in your own words.</span>
+                  </div>
+                </label>
+              </div>
+
+              {reportReason === "other" && (
+                <div className="space-y-1.5 animate-in slide-in-from-top-2 duration-150">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Describe the issue</label>
+                  <textarea
+                    rows={3}
+                    value={customReason}
+                    onChange={(e) => setCustomReason(e.target.value)}
+                    placeholder="Type the reason why this article should be moderated..."
+                    className="w-full p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-indigo-500 transition-colors text-slate-700 dark:text-slate-350 resize-none"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => handleReportSubmit(false)}
+                className="flex-grow py-2.5 px-4 text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:bg-red-850 rounded-xl transition-colors cursor-pointer text-center"
+              >
+                Submit Report
+              </button>
+              <button
+                type="button"
+                onClick={() => handleReportSubmit(true)}
+                className="flex-grow py-2.5 px-4 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200 rounded-xl transition-colors cursor-pointer text-center"
+                title="Test moderation threshold instantly"
+              >
+                Submit & Simulate Removal
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -9,6 +9,8 @@ import Dashboard from "../pages/Dashboard";
 import CreatePost from "../pages/CreatePost";
 import EditPost from "../pages/EditPost";
 import BlogDetails from "../pages/BlogDetails";
+import Settings from "../pages/Settings";
+import Explore from "../pages/Explore";
 import NotFound from "../pages/NotFound";
 
 interface ProtectedRouteProps {
@@ -29,6 +31,7 @@ export default function AppRoutes() {
       <Route element={<MainLayout />}>
         {/* Public Routes */}
         <Route path="/" element={<Home />} />
+        <Route path="/explore" element={<Explore />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/post/:id" element={<BlogDetails />} />
@@ -55,6 +58,14 @@ export default function AppRoutes() {
           element={
             <ProtectedRoute>
               <EditPost />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <ProtectedRoute>
+              <Settings />
             </ProtectedRoute>
           }
         />
