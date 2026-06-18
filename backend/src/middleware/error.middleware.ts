@@ -12,7 +12,7 @@ export function errorMiddleware(
   err: any,
   req: Request,
   res: Response,
-  next: NextFunction
+  _next: NextFunction
 ) {
   console.error("Error handler caught error:", err);
 

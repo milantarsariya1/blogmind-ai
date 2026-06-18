@@ -25,7 +25,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     };
     req.user = decoded;
     next();
-  } catch (error) {
+  } catch {
     return res.status(401).json({ error: "Authentication failed. Invalid or expired token." });
   }
 }

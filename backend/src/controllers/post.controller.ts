@@ -21,6 +21,17 @@ function calculateReadingTime(content: string): number {
   return Math.ceil(wordCount / 200) || 1;
 }
 
+function formatPost(post: any) {
+  if (!post) return null;
+  return {
+    ...post,
+    tags: post.tags ? post.tags.split(",").filter(Boolean) : [],
+    reportReasons: post.reportReasons ? post.reportReasons.split(",").filter(Boolean) : [],
+    author: post.user ? post.user.name : "",
+    readingTime: calculateReadingTime(post.content),
+  };
+}
+
 export async function createPost(req: AuthRequest, res: Response, next: NextFunction) {
   try {
     if (!req.user) {
@@ -36,8 +47,9 @@ export async function createPost(req: AuthRequest, res: Response, next: NextFunc
         content: validated.content,
         summary: validated.summary,
         featureImage: validated.featureImage,
-        tags: validated.tags,
+        tags: validated.tags.length > 0 ? `,${validated.tags.join(",")},` : "",
         status: validated.status,
+        reportReasons: "",
       },
       include: {
         user: {
@@ -48,13 +60,7 @@ export async function createPost(req: AuthRequest, res: Response, next: NextFunc
       },
     });
 
-    const readingTime = calculateReadingTime(post.content);
-
-    return res.status(201).json({
-      ...post,
-      author: post.user.name,
-      readingTime,
-    });
+    return res.status(201).json(formatPost(post));
   } catch (error) {
     next(error);
   }
@@ -75,15 +81,15 @@ export async function getPosts(req: Request, res: Response, next: NextFunction) 
 
     if (tag) {
       whereClause.tags = {
-        has: tag,
+        contains: `,${tag},`,
       };
     }
 
     if (search) {
       whereClause.OR = [
-        { title: { contains: search, mode: "insensitive" } },
-        { summary: { contains: search, mode: "insensitive" } },
-        { content: { contains: search, mode: "insensitive" } },
+        { title: { contains: search } },
+        { summary: { contains: search } },
+        { content: { contains: search } },
       ];
     }
 
@@ -108,11 +114,7 @@ export async function getPosts(req: Request, res: Response, next: NextFunction) 
       }),
     ]);
 
-    const formattedPosts = posts.map((post) => ({
-      ...post,
-      author: post.user.name,
-      readingTime: calculateReadingTime(post.content),
-    }));
+    const formattedPosts = posts.map(formatPost);
 
     return res.json({
       posts: formattedPosts,
@@ -150,11 +152,7 @@ export async function getMyPosts(req: AuthRequest, res: Response, next: NextFunc
       },
     });
 
-    const formattedPosts = posts.map((post) => ({
-      ...post,
-      author: post.user.name,
-      readingTime: calculateReadingTime(post.content),
-    }));
+    const formattedPosts = posts.map(formatPost);
 
     return res.json(formattedPosts);
   } catch (error) {
@@ -187,12 +185,8 @@ export async function getPostById(req: Request, res: Response, next: NextFunctio
       throw new AppError(404, "Post not found.");
     }
 
-    return res.json({
-      ...post,
-      author: post.user.name,
-      readingTime: calculateReadingTime(post.content),
-    });
-  } catch (error) {
+    return res.json(formatPost(post));
+  } catch {
     next(new AppError(404, "Post not found."));
   }
 }
@@ -225,7 +219,7 @@ export async function updatePost(req: AuthRequest, res: Response, next: NextFunc
         content: validated.content,
         summary: validated.summary,
         featureImage: validated.featureImage,
-        tags: validated.tags,
+        tags: validated.tags ? `,${validated.tags.join(",")},` : undefined,
         status: validated.status,
       },
       include: {
@@ -237,11 +231,7 @@ export async function updatePost(req: AuthRequest, res: Response, next: NextFunc
       },
     });
 
-    return res.json({
-      ...updatedPost,
-      author: updatedPost.user.name,
-      readingTime: calculateReadingTime(updatedPost.content),
-    });
+    return res.json(formatPost(updatedPost));
   } catch (error) {
     next(error);
   }
@@ -295,7 +285,8 @@ export async function reportPost(req: Request, res: Response, next: NextFunction
     }
 
     const newReportCount = post.reportCount + 1;
-    const newReasons = [...post.reportReasons, reason];
+    const currentReasons = post.reportReasons ? post.reportReasons.split(",").filter(Boolean) : [];
+    const newReasons = [...currentReasons, reason];
 
     if (newReportCount > 7) {
       // Automatic removal
@@ -312,7 +303,7 @@ export async function reportPost(req: Request, res: Response, next: NextFunction
         where: { id: id },
         data: {
           reportCount: newReportCount,
-          reportReasons: newReasons,
+          reportReasons: newReasons.join(","),
         },
       });
       return res.json({

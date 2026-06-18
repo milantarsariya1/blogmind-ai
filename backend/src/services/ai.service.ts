@@ -43,7 +43,7 @@ export async function generateSummary(content: string): Promise<string> {
     return chatCompletion.choices[0]?.message?.content?.trim() || "";
   } catch (error: any) {
     console.error("Error generating AI summary:", error);
-    throw new Error(`Failed to generate summary: ${error.message}`);
+    throw new Error(`Failed to generate summary: ${error.message}`, { cause: error });
   }
 }
 
@@ -73,6 +73,6 @@ export async function correctGrammar(content: string): Promise<string> {
     return chatCompletion.choices[0]?.message?.content?.trim() || "";
   } catch (error: any) {
     console.error("Error correcting grammar:", error);
-    throw new Error(`Failed to correct grammar: ${error.message}`);
+    throw new Error(`Failed to correct grammar: ${error.message}`, { cause: error });
   }
 }

@@ -1,7 +1,6 @@
 import { Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthRequest } from "../middleware/auth.middleware";
-import { AppError } from "../middleware/error.middleware";
 import { generateSummary, correctGrammar } from "../services/ai.service";
 
 const aiSchema = z.object({
