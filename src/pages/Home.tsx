@@ -2,10 +2,11 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useBlog } from "../App";
 import BlogCard from "../components/BlogCard";
+import LoadingSpinner from "../components/LoadingSpinner";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export default function Home() {
-  const { posts } = useBlog();
+  const { posts, isLoading } = useBlog();
 
   // Get only published posts, sorted by date (newest first), and slice the top 6
   const topSixPosts = useMemo(() => {
@@ -72,7 +73,11 @@ export default function Home() {
           </div>
 
           {/* Cards Grid */}
-          {topSixPosts.length > 0 ? (
+          {isLoading && posts.length === 0 ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner />
+            </div>
+          ) : topSixPosts.length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
               {topSixPosts.map((post) => (
                 <BlogCard

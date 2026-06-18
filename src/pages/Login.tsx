@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useBlog } from "../App";
-import { mockUsers } from "../data/mockUsers";
-import { Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
+import { authApi } from "../services/api";
+import { Eye, EyeOff, Lock, Mail, ArrowRight, Loader2 } from "lucide-react";
 
 export default function Login() {
   const { login } = useBlog();
@@ -11,6 +11,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string; general?: string }>({});
 
   const validate = () => {
@@ -27,26 +28,25 @@ export default function Login() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Simulate authentication against mock users
-    const matchedUser = mockUsers.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase() && u.passwordHash === password
-    );
+    setIsLoading(true);
+    setErrors({});
 
-    if (matchedUser) {
-      login({
-        id: matchedUser.id,
-        name: matchedUser.name,
-        email: matchedUser.email,
-      });
+    try {
+      const response = await authApi.login({ email, password });
+      login(response.user, response.token);
       navigate("/dashboard");
-    } else {
+    } catch (error: any) {
+      console.error("Login failed:", error);
+      const errMsg = error.response?.data?.error || "Invalid email or password.";
       setErrors({
-        general: "Invalid email or password.",
+        general: errMsg,
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -87,6 +87,7 @@ export default function Login() {
                   setEmail(e.target.value);
                   setErrors((prev) => ({ ...prev, email: undefined, general: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.email
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -114,6 +115,7 @@ export default function Login() {
                   setPassword(e.target.value);
                   setErrors((prev) => ({ ...prev, password: undefined, general: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.password
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -123,6 +125,7 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -135,10 +138,20 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs cursor-pointer"
+            disabled={isLoading}
+            className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>Log In</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Logging In...</span>
+              </>
+            ) : (
+              <>
+                <span>Log In</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 

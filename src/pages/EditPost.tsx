@@ -7,6 +7,7 @@ import LinkExtension from "@tiptap/extension-link";
 import FeatureImagePicker from "../components/FeatureImagePicker";
 import TagInput from "../components/TagInput";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { postApi, aiApi } from "../services/api";
 import {
   Bold,
   Italic,
@@ -22,33 +23,28 @@ import {
   CheckCircle,
   FileText,
   Send,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from "lucide-react";
 
 export default function EditPost() {
   const { id } = useParams();
-  const { posts, updatePost, currentUser } = useBlog();
+  const { updatePost, currentUser } = useBlog();
   const navigate = useNavigate();
 
-  // Find the target post
-  const post = posts.find((p) => p.id === id);
-
-  // Access control guard: prevent editing other authors' posts
-  useEffect(() => {
-    if (post && currentUser) {
-      if (post.author.toLowerCase() !== currentUser.name.toLowerCase()) {
-        alert("Access denied: You do not have permission to edit articles written by other creators.");
-        navigate("/dashboard");
-      }
-    }
-  }, [post, currentUser, navigate]);
+  const [post, setPost] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [featureImage, setFeatureImage] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [status, setStatus] = useState<"draft" | "published">("draft");
+
+  // Loader states
   const [isAiCorrecting, setIsAiCorrecting] = useState(false);
+  const [isAiSummarizing, setIsAiSummarizing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
   // Initialize Tiptap Editor
@@ -65,17 +61,58 @@ export default function EditPost() {
     content: ""
   });
 
-  // Populate data when post is loaded
+  // Fetch post details on load
   useEffect(() => {
-    if (post && editor) {
-      setTitle(post.title);
-      setSummary(post.summary);
-      setFeatureImage(post.featureImage);
-      setTags(post.tags);
-      setStatus(post.status);
+    const fetchPostDetails = async () => {
+      if (!id) return;
+      try {
+        setIsLoading(true);
+        const data = await postApi.getPostById(id);
+        setPost(data);
+        
+        // Populate inputs
+        setTitle(data.title);
+        setSummary(data.summary);
+        setFeatureImage(data.featureImage);
+        setTags(data.tags);
+        setStatus(data.status);
+        if (editor) {
+          editor.commands.setContent(data.content);
+        }
+      } catch (error) {
+        console.error("Failed to load post details for editing:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPostDetails();
+  }, [id, editor]);
+
+  // Access control guard: prevent editing other authors' posts
+  useEffect(() => {
+    if (post && currentUser) {
+      if (post.userId !== currentUser.id && post.author.toLowerCase() !== currentUser.name.toLowerCase()) {
+        alert("Access denied: You do not have permission to edit articles written by other creators.");
+        navigate("/dashboard");
+      }
+    }
+  }, [post, currentUser, navigate]);
+
+  // Set editor content if post loaded before editor initialization
+  useEffect(() => {
+    if (post && editor && editor.isEmpty) {
       editor.commands.setContent(post.content);
     }
   }, [post, editor]);
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-40">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -96,24 +133,31 @@ export default function EditPost() {
     return null;
   }
 
-  // AI Summary simulation
-  const handleGenerateSummary = () => {
+  // AI Summary generation calling backend
+  const handleGenerateSummary = async () => {
     const text = editor.getText().trim();
     if (!text) {
       alert("Please write some content in the editor first.");
       return;
     }
 
-    const cleanTitle = title.trim() || "this article";
-    const tagList = tags.length > 0 ? tags.join(", ") : "technology and design";
-    const generated = `This article explores the core concepts of '${cleanTitle}', discussing key issues such as ${tagList}. It provides actionable insights and practical recommendations for readers looking to excel in this domain.`;
-    
-    setSummary(generated);
-    triggerAiMessage("AI summary generated successfully!");
+    try {
+      setIsAiSummarizing(true);
+      setAiMessage(null);
+
+      const res = await aiApi.summarize(text);
+      setSummary(res.summary);
+      triggerAiMessage("AI summary generated successfully!");
+    } catch (error) {
+      console.error("AI summarization failed:", error);
+      alert("AI summarization service is currently offline or failed.");
+    } finally {
+      setIsAiSummarizing(false);
+    }
   };
 
-  // AI Grammar Correction simulation
-  const handleCorrectGrammar = () => {
+  // AI Grammar Correction calling backend
+  const handleCorrectGrammar = async () => {
     const rawHtml = editor.getHTML();
     const text = editor.getText().trim();
     if (!text) {
@@ -121,24 +165,19 @@ export default function EditPost() {
       return;
     }
 
-    setIsAiCorrecting(true);
-    setAiMessage(null);
+    try {
+      setIsAiCorrecting(true);
+      setAiMessage(null);
 
-    setTimeout(() => {
-      let correctedHtml = rawHtml
-        .replace(/\bteh\b/g, "the")
-        .replace(/\brecieve\b/g, "receive")
-        .replace(/\bseperate\b/g, "separate")
-        .replace(/\bnt\b/g, "n't")
-        .replace(/\bdont\b/g, "don't")
-        .replace(/\bcant\b/g, "can't")
-        .replace(/\b(w)eb\s(d)evelopment\b/gi, "Web Development")
-        .replace(/\b(r)eact\b/g, "React");
-
-      editor.commands.setContent(correctedHtml);
-      setIsAiCorrecting(false);
+      const res = await aiApi.correct(rawHtml);
+      editor.commands.setContent(res.correctedText);
       triggerAiMessage("Grammar corrections applied successfully!");
-    }, 2000);
+    } catch (error) {
+      console.error("AI grammar check failed:", error);
+      alert("AI grammar correction service is currently offline or failed.");
+    } finally {
+      setIsAiCorrecting(false);
+    }
   };
 
   const triggerAiMessage = (msg: string) => {
@@ -146,7 +185,7 @@ export default function EditPost() {
     setTimeout(() => setAiMessage(null), 4000);
   };
 
-  const handleSave = (updatedStatus: "draft" | "published") => {
+  const handleSave = async (updatedStatus: "draft" | "published") => {
     if (!title.trim()) {
       alert("Please enter a title for your blog post.");
       return;
@@ -159,16 +198,25 @@ export default function EditPost() {
       ? (textContent.slice(0, 145) + (textContent.length > 145 ? "..." : ""))
       : "No summary provided.";
     
-    updatePost(post.id, {
-      title: title.trim(),
-      summary: summary.trim() || fallbackSummary,
-      content: contentHtml,
-      featureImage,
-      tags,
-      status: updatedStatus
-    });
+    try {
+      setIsSubmitting(true);
+      
+      await updatePost(post.id, {
+        title: title.trim(),
+        summary: summary.trim() || fallbackSummary,
+        content: contentHtml,
+        featureImage,
+        tags,
+        status: updatedStatus
+      });
 
-    navigate("/dashboard");
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Failed to update post:", error);
+      alert("Failed to save changes. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const setLink = () => {
@@ -192,6 +240,7 @@ export default function EditPost() {
       {/* Return link */}
       <button
         onClick={() => navigate("/dashboard")}
+        disabled={isSubmitting}
         className="inline-flex items-center space-x-2 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -204,7 +253,7 @@ export default function EditPost() {
           Edit Article
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Make adjustments to your content and update your publication details.
+          Make updates to your draft or publication, and leverage AI to polish edits.
         </p>
       </div>
 
@@ -221,11 +270,12 @@ export default function EditPost() {
               placeholder="Give your article a catchy title..."
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-base font-medium outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600 transition-all text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
+              disabled={isSubmitting}
+              className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/80 rounded-xl text-base font-medium outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600 transition-all text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
             />
           </div>
 
-          {/* Tiptap Toolbar & Editor */}
+          {/* Tiptap Editor & Toolbar */}
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
               Content Body
@@ -234,156 +284,123 @@ export default function EditPost() {
             <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl overflow-hidden shadow-xs focus-within:ring-2 focus-within:ring-indigo-600/20 focus-within:border-indigo-600 transition-all duration-200">
               {/* Toolbar */}
               <div className="flex flex-wrap items-center gap-1 p-2 bg-slate-50 dark:bg-slate-950/60 border-b border-slate-200 dark:border-slate-800">
-                {/* Formatting triggers */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("bold")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("bold") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Bold"
                 >
-                  <Bold className="w-4 h-4" />
+                  <Bold className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("italic")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("italic") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Italic"
                 >
-                  <Italic className="w-4 h-4" />
+                  <Italic className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleCode().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("code")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("code") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Inline Code"
                 >
-                  <Code className="w-4 h-4" />
+                  <Code className="w-4.5 h-4.5" />
                 </button>
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
 
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Headings */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 1 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 1 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 1"
                 >
-                  <Heading1 className="w-4 h-4" />
+                  <Heading1 className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 2 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 2 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 2"
                 >
-                  <Heading2 className="w-4 h-4" />
+                  <Heading2 className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 3 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 3 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 3"
                 >
-                  <Heading3 className="w-4 h-4" />
+                  <Heading3 className="w-4.5 h-4.5" />
                 </button>
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
 
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Lists */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("bulletList")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("bulletList") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Bullet List"
                 >
-                  <List className="w-4 h-4" />
+                  <List className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("orderedList")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("orderedList") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
-                  title="Numbered List"
+                  title="Ordered List"
                 >
-                  <ListOrdered className="w-4 h-4" />
+                  <ListOrdered className="w-4.5 h-4.5" />
                 </button>
-
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Quotes & Links */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("blockquote")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("blockquote") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Blockquote"
                 >
-                  <Quote className="w-4 h-4" />
+                  <Quote className="w-4.5 h-4.5" />
                 </button>
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
+
                 <button
                   type="button"
                   onClick={setLink}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("link")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("link") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
-                  title="Insert Link"
+                  title="Hyperlink"
                 >
-                  <LinkIcon className="w-4 h-4" />
+                  <LinkIcon className="w-4.5 h-4.5" />
                 </button>
               </div>
 
               {/* Editor Workspace */}
-              <div className="p-6 min-h-[300px] dark:text-slate-200">
-                {isAiCorrecting ? (
-                  <div className="flex flex-col items-center justify-center min-h-[250px]">
-                    <LoadingSpinner message="AI correcting grammar & style..." />
-                  </div>
-                ) : (
-                  <EditorContent editor={editor} />
-                )}
+              <div className="p-4 min-h-[350px] dark:text-slate-100 max-h-[500px] overflow-y-auto">
+                <EditorContent editor={editor} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Configurations Panel (Right Column) */}
+        {/* Action Sidebar (Right Column) */}
         <div className="space-y-6">
           {/* Action Cards */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-xs">
@@ -395,25 +412,27 @@ export default function EditPost() {
               <button
                 type="button"
                 onClick={() => handleSave("published")}
-                className={`w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold rounded-xl transition-all shadow-xs cursor-pointer ${
+                disabled={isSubmitting}
+                className={`w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                   status === "published"
                     ? "bg-indigo-600 text-white hover:bg-indigo-700"
                     : "bg-indigo-50/50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200/30 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/60 dark:border-indigo-900/30"
                 }`}
               >
-                <Send className="w-4 h-4" />
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span>{status === "published" ? "Save Updates" : "Publish Now"}</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleSave("draft")}
-                className={`w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold rounded-xl transition-all cursor-pointer ${
+                disabled={isSubmitting}
+                className={`w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold rounded-xl transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                   status === "draft"
                     ? "bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-950 dark:hover:bg-slate-200"
                     : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800/60 border border-slate-200/20 dark:border-slate-800/40"
                 }`}
               >
-                <FileText className="w-4 h-4" />
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                 <span>{status === "draft" ? "Save Draft" : "Revert to Draft"}</span>
               </button>
             </div>
@@ -437,34 +456,43 @@ export default function EditPost() {
               <button
                 type="button"
                 onClick={handleCorrectGrammar}
-                disabled={isAiCorrecting}
-                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group"
+                disabled={isAiCorrecting || isAiSummarizing}
+                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed animate-in fade-in"
               >
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Correct Grammar
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Spelling, punctuation & styling polish.
+                    {isAiCorrecting ? "Reviewing grammar..." : "Spelling, punctuation & styling polish."}
                   </p>
                 </div>
-                <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                {isAiCorrecting ? (
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={handleGenerateSummary}
-                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group"
+                disabled={isAiCorrecting || isAiSummarizing}
+                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed animate-in fade-in"
               >
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Generate Summary
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Build a structured abstract paragraph.
+                    {isAiSummarizing ? "Creating summary..." : "Build a structured abstract paragraph."}
                   </p>
                 </div>
-                <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                {isAiSummarizing ? (
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                )}
               </button>
             </div>
 
@@ -478,7 +506,7 @@ export default function EditPost() {
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
                 placeholder="AI summary outputs here..."
-                className="w-full p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-indigo-500 transition-colors text-slate-700 dark:text-slate-300 resize-none"
+                className="w-full p-3 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl text-xs outline-none focus:border-indigo-500 transition-colors text-slate-700 dark:text-slate-350 resize-none"
               />
             </div>
           </div>

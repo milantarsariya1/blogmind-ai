@@ -1,39 +1,48 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useBlog } from "../App";
+import { postApi } from "../services/api";
 import { Clock, Eye, Calendar, ArrowLeft, BookOpen, Flag } from "lucide-react";
 import { formatDate } from "../utils/formatDate";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function BlogDetails() {
   const { id } = useParams();
-  const { posts, updatePost, deletePost } = useBlog();
+  const { posts: allContextPosts } = useBlog();
   const navigate = useNavigate();
+
+  const [post, setPost] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   // Report state
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [reportReason, setReportReason] = useState("irrelevant");
   const [customReason, setCustomReason] = useState("");
 
-  // Find target post
-  const post = posts.find((p) => p.id === id);
-
-  // Increment views count on load (once per mount per id)
+  // Fetch post details on load (and increment view on backend)
   useEffect(() => {
-    if (post) {
-      // Use a small timeout to avoid updating state during rendering lifecycle warnings
-      const timer = setTimeout(() => {
-        updatePost(post.id, { views: post.views + 1 });
-      }, 50);
-      return () => clearTimeout(timer);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const fetchPostDetails = async () => {
+      if (!id) return;
+      try {
+        setIsLoading(true);
+        const data = await postApi.getPostById(id);
+        setPost(data);
+      } catch (error) {
+        console.error("Failed to load post details:", error);
+        setPost(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPostDetails();
   }, [id]);
 
   // Retrieve related posts sharing tags, or fallback to recent published posts
   const relatedPosts = useMemo(() => {
     if (!post) return [];
     
-    const candidates = posts.filter(
+    const candidates = allContextPosts.filter(
       (p) => p.id !== post.id && p.status === "published"
     );
 
@@ -45,9 +54,9 @@ export default function BlogDetails() {
       return tagMatches.slice(0, 3);
     }
     return candidates.slice(0, 3);
-  }, [post, posts]);
+  }, [post, allContextPosts]);
 
-  const handleReportSubmit = (simulateMax: boolean = false) => {
+  const handleReportSubmit = async (simulateMax: boolean = false) => {
     if (!post) return;
     
     let finalReason = reportReason;
@@ -59,30 +68,57 @@ export default function BlogDetails() {
       finalReason = customReason.trim();
     }
 
-    const currentCount = post.reportCount || 0;
-    const countToAdd = simulateMax ? 8 : 1;
-    const newReportCount = currentCount + countToAdd;
-    
-    const existingReasons = post.reportReasons || [];
-    const newReasons = [...existingReasons, finalReason];
+    try {
+      setIsReportModalOpen(false);
 
-    setIsReportModalOpen(false);
-
-    if (newReportCount > 7) {
-      deletePost(post.id);
-      alert("This post has been automatically removed from the site as it has received more than 7 reports from the community.");
-      navigate("/");
-    } else {
-      updatePost(post.id, {
-        reportCount: newReportCount,
-        reportReasons: newReasons,
-      });
-      alert(`Report submitted successfully! The content is now under review. (Current reports: ${newReportCount}/8)`);
+      if (simulateMax) {
+        // Send a specific flag or do repeated requests to trigger backend removal limit of 8
+        // Let's send a flag that immediately triggers the limit, or in the database we can just send multiple reports
+        // Since we want to test moderation instantly, let's call the report endpoint.
+        // Wait, on the backend we can check if the reason contains a simulation string, or we can just send the report
+        // and delete it. But since backend reportPost deletes it if reportCount > 7, we can just trigger it!
+        // To simulate, we can send a custom reason that the backend could recognize, or we can just send 8 report calls in parallel.
+        // Let's run a loop to report it 8 times to satisfy backend criteria! That's very robust and works on standard API!
+        setIsLoading(true);
+        for (let i = 0; i < 8; i++) {
+          const res = await postApi.reportPost(post.id, `Simulation report #${i + 1}: ${finalReason}`);
+          if (res.deleted) {
+            alert("This post has been automatically removed from the site as it has received more than 7 reports from the community.");
+            navigate("/");
+            return;
+          }
+        }
+      } else {
+        const res = await postApi.reportPost(post.id, finalReason);
+        if (res.deleted) {
+          alert("This post has been automatically removed from the site as it has received more than 7 reports from the community.");
+          navigate("/");
+        } else {
+          // Update local post state
+          setPost((prev: any) => ({
+            ...prev,
+            reportCount: (prev.reportCount || 0) + 1,
+          }));
+          alert(`Report submitted successfully! The content is now under review. (Current reports: ${(post.reportCount || 0) + 1}/8)`);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to submit report:", error);
+      alert("Failed to submit report. Please try again.");
+    } finally {
+      setIsLoading(false);
+      setReportReason("irrelevant");
+      setCustomReason("");
     }
-
-    setReportReason("irrelevant");
-    setCustomReason("");
   };
+
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center py-40">
+        <LoadingSpinner />
+      </div>
+    );
+  }
 
   if (!post) {
     return (
@@ -119,7 +155,7 @@ export default function BlogDetails() {
           <article className="lg:col-span-8 space-y-8">
             {/* Tag List */}
             <div className="flex flex-wrap gap-2">
-              {post.tags.map((tag) => (
+              {post.tags.map((tag: string) => (
                 <span
                   key={tag}
                   className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100/50 dark:border-indigo-900/30"

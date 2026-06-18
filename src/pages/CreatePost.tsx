@@ -6,7 +6,7 @@ import StarterKit from "@tiptap/starter-kit";
 import LinkExtension from "@tiptap/extension-link";
 import FeatureImagePicker, { PREDEFINED_IMAGES } from "../components/FeatureImagePicker";
 import TagInput from "../components/TagInput";
-import LoadingSpinner from "../components/LoadingSpinner";
+import { aiApi } from "../services/api";
 import {
   Bold,
   Italic,
@@ -22,18 +22,23 @@ import {
   CheckCircle,
   FileText,
   Send,
-  ArrowLeft
+  ArrowLeft,
+  Loader2
 } from "lucide-react";
 
 export default function CreatePost() {
-  const { createPost, currentUser } = useBlog();
+  const { createPost } = useBlog();
   const navigate = useNavigate();
 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [featureImage, setFeatureImage] = useState(PREDEFINED_IMAGES[0]);
   const [tags, setTags] = useState<string[]>([]);
+  
+  // Loader states
   const [isAiCorrecting, setIsAiCorrecting] = useState(false);
+  const [isAiSummarizing, setIsAiSummarizing] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
   // Initialize Tiptap Editor
@@ -54,25 +59,31 @@ export default function CreatePost() {
     return null;
   }
 
-  // AI Summary simulation
-  const handleGenerateSummary = () => {
+  // AI Summary handler calling backend Groq API
+  const handleGenerateSummary = async () => {
     const text = editor.getText().trim();
     if (!text || text === "Start writing your next masterpiece here...") {
       alert("Please write some content in the editor first.");
       return;
     }
 
-    // Generate a contextual mock summary
-    const cleanTitle = title.trim() || "this article";
-    const tagList = tags.length > 0 ? tags.join(", ") : "technology and design";
-    const generated = `This article explores the core concepts of '${cleanTitle}', discussing key issues such as ${tagList}. It provides actionable insights and practical recommendations for readers looking to excel in this domain.`;
-    
-    setSummary(generated);
-    triggerAiMessage("AI summary generated successfully!");
+    try {
+      setIsAiSummarizing(true);
+      setAiMessage(null);
+      
+      const res = await aiApi.summarize(text);
+      setSummary(res.summary);
+      triggerAiMessage("AI summary generated successfully!");
+    } catch (error) {
+      console.error("AI summarization failed:", error);
+      alert("AI summarization service is currently offline or failed.");
+    } finally {
+      setIsAiSummarizing(false);
+    }
   };
 
-  // AI Grammar Correction simulation
-  const handleCorrectGrammar = () => {
+  // AI Grammar Correction handler calling backend Groq API
+  const handleCorrectGrammar = async () => {
     const rawHtml = editor.getHTML();
     const text = editor.getText().trim();
     if (!text || text === "Start writing your next masterpiece here...") {
@@ -80,25 +91,19 @@ export default function CreatePost() {
       return;
     }
 
-    setIsAiCorrecting(true);
-    setAiMessage(null);
+    try {
+      setIsAiCorrecting(true);
+      setAiMessage(null);
 
-    setTimeout(() => {
-      // Simulate simple grammar corrections: replace common typos and lowercase issues
-      let correctedHtml = rawHtml
-        .replace(/\bteh\b/g, "the")
-        .replace(/\brecieve\b/g, "receive")
-        .replace(/\bseperate\b/g, "separate")
-        .replace(/\bnt\b/g, "n't")
-        .replace(/\bdont\b/g, "don't")
-        .replace(/\bcant\b/g, "can't")
-        .replace(/\b(w)eb\s(d)evelopment\b/gi, "Web Development")
-        .replace(/\b(r)eact\b/g, "React");
-
-      editor.commands.setContent(correctedHtml);
-      setIsAiCorrecting(false);
+      const res = await aiApi.correct(rawHtml);
+      editor.commands.setContent(res.correctedText);
       triggerAiMessage("Grammar corrections applied successfully!");
-    }, 2000);
+    } catch (error) {
+      console.error("AI grammar check failed:", error);
+      alert("AI grammar correction service is currently offline or failed.");
+    } finally {
+      setIsAiCorrecting(false);
+    }
   };
 
   const triggerAiMessage = (msg: string) => {
@@ -106,7 +111,7 @@ export default function CreatePost() {
     setTimeout(() => setAiMessage(null), 4000);
   };
 
-  const handleSave = (status: "draft" | "published") => {
+  const handleSave = async (status: "draft" | "published") => {
     if (!title.trim()) {
       alert("Please enter a title for your blog post.");
       return;
@@ -118,18 +123,26 @@ export default function CreatePost() {
     const fallbackSummary = textContent && textContent !== "Start writing your next masterpiece here..."
       ? (textContent.slice(0, 145) + (textContent.length > 145 ? "..." : ""))
       : "No summary provided.";
-    
-    createPost({
-      title: title.trim(),
-      summary: summary.trim() || fallbackSummary,
-      content: contentHtml,
-      featureImage,
-      tags,
-      author: currentUser?.name || "Anonymous",
-      status
-    });
 
-    navigate("/dashboard");
+    try {
+      setIsSubmitting(true);
+      
+      await createPost({
+        title: title.trim(),
+        summary: summary.trim() || fallbackSummary,
+        content: contentHtml,
+        featureImage,
+        tags,
+        status
+      });
+
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Failed to save post:", error);
+      alert("Failed to save the article. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Toggle link menu
@@ -154,6 +167,7 @@ export default function CreatePost() {
       {/* Return link */}
       <button
         onClick={() => navigate("/dashboard")}
+        disabled={isSubmitting}
         className="inline-flex items-center space-x-2 text-sm font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -166,7 +180,7 @@ export default function CreatePost() {
           Create New Article
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Draft your content, tag it, and leverage mock AI features to polish your writing.
+          Draft your content, tag it, and leverage AI features to polish your writing.
         </p>
       </div>
 
@@ -183,6 +197,7 @@ export default function CreatePost() {
               placeholder="Give your article a catchy title..."
               value={title}
               onChange={(e) => setTitle(e.target.value)}
+              disabled={isSubmitting}
               className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-base font-medium outline-none focus:ring-2 focus:ring-indigo-600/30 focus:border-indigo-600 transition-all text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500"
             />
           </div>
@@ -200,152 +215,120 @@ export default function CreatePost() {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("bold")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("bold") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Bold"
                 >
-                  <Bold className="w-4 h-4" />
+                  <Bold className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("italic")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("italic") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Italic"
                 >
-                  <Italic className="w-4 h-4" />
+                  <Italic className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleCode().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("code")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("code") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Inline Code"
                 >
-                  <Code className="w-4 h-4" />
+                  <Code className="w-4.5 h-4.5" />
                 </button>
-
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Headings */}
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
+                
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 1 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 1 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 1"
                 >
-                  <Heading1 className="w-4 h-4" />
+                  <Heading1 className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 2 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 2 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 2"
                 >
-                  <Heading2 className="w-4 h-4" />
+                  <Heading2 className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("heading", { level: 3 })
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("heading", { level: 3 }) ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Heading 3"
                 >
-                  <Heading3 className="w-4 h-4" />
+                  <Heading3 className="w-4.5 h-4.5" />
                 </button>
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
 
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Lists */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("bulletList")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("bulletList") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Bullet List"
                 >
-                  <List className="w-4 h-4" />
+                  <List className="w-4.5 h-4.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("orderedList")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("orderedList") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
-                  title="Numbered List"
+                  title="Ordered List"
                 >
-                  <ListOrdered className="w-4 h-4" />
+                  <ListOrdered className="w-4.5 h-4.5" />
                 </button>
-
-                <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                {/* Quotes & Links */}
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBlockquote().run()}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("blockquote")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("blockquote") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
                   title="Blockquote"
                 >
-                  <Quote className="w-4 h-4" />
+                  <Quote className="w-4.5 h-4.5" />
                 </button>
+                <div className="w-px h-6 bg-slate-250 dark:bg-slate-800 mx-1" />
+
                 <button
                   type="button"
                   onClick={setLink}
-                  className={`p-2 rounded-lg cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-800/80 transition-colors ${
-                    editor.isActive("link")
-                      ? "bg-indigo-50 text-indigo-600 dark:bg-indigo-950/50 dark:text-indigo-400"
-                      : "text-slate-500 dark:text-slate-400"
+                  className={`p-2 rounded-lg transition-colors hover:bg-slate-200/50 dark:hover:bg-slate-800/50 ${
+                    editor.isActive("link") ? "text-indigo-650 bg-indigo-50/50 dark:bg-indigo-950/40" : "text-slate-500"
                   }`}
-                  title="Insert Link"
+                  title="Hyperlink"
                 >
-                  <LinkIcon className="w-4 h-4" />
+                  <LinkIcon className="w-4.5 h-4.5" />
                 </button>
               </div>
 
               {/* Editor Workspace */}
-              <div className="p-6 min-h-[300px] dark:text-slate-200">
-                {isAiCorrecting ? (
-                  <div className="flex flex-col items-center justify-center min-h-[250px]">
-                    <LoadingSpinner message="AI correcting grammar & style..." />
-                  </div>
-                ) : (
-                  <EditorContent editor={editor} />
-                )}
+              <div className="p-4 min-h-[350px] dark:text-slate-100 max-h-[500px] overflow-y-auto">
+                <EditorContent editor={editor} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Configurations Panel (Right Column) */}
+        {/* Action Sidebar (Right Column) */}
         <div className="space-y-6">
           {/* Action Cards */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/80 rounded-2xl p-5 space-y-4 shadow-xs">
@@ -357,17 +340,19 @@ export default function CreatePost() {
               <button
                 type="button"
                 onClick={() => handleSave("published")}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-xs cursor-pointer"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Send className="w-4 h-4" />
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span>Publish Post</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleSave("draft")}
-                className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer border border-slate-200/20 dark:border-slate-800/40"
+                disabled={isSubmitting}
+                className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800/60 rounded-xl transition-all cursor-pointer border border-slate-200/20 dark:border-slate-800/40 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <FileText className="w-4 h-4" />
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                 <span>Save Draft</span>
               </button>
             </div>
@@ -391,34 +376,43 @@ export default function CreatePost() {
               <button
                 type="button"
                 onClick={handleCorrectGrammar}
-                disabled={isAiCorrecting}
-                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group"
+                disabled={isAiCorrecting || isAiSummarizing}
+                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed animate-in fade-in"
               >
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Correct Grammar
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Spelling, punctuation & styling polish.
+                    {isAiCorrecting ? "Reviewing grammar..." : "Spelling, punctuation & styling polish."}
                   </p>
                 </div>
-                <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                {isAiCorrecting ? (
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                )}
               </button>
 
               <button
                 type="button"
                 onClick={handleGenerateSummary}
-                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group"
+                disabled={isAiCorrecting || isAiSummarizing}
+                className="w-full text-left flex items-center justify-between p-3 rounded-xl border border-indigo-200/50 hover:border-indigo-400 dark:border-indigo-900/50 dark:hover:border-indigo-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/10 transition-all cursor-pointer group disabled:opacity-50 disabled:cursor-not-allowed animate-in fade-in"
               >
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     Generate Summary
                   </h4>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Build a structured abstract paragraph.
+                    {isAiSummarizing ? "Creating summary..." : "Build a structured abstract paragraph."}
                   </p>
                 </div>
-                <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                {isAiSummarizing ? (
+                  <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-indigo-500 group-hover:animate-bounce" />
+                )}
               </button>
             </div>
 

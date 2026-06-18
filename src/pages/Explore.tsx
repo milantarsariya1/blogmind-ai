@@ -1,57 +1,80 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useBlog } from "../App";
 import BlogCard from "../components/BlogCard";
+import { postApi } from "../services/api";
 import { Search, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import EmptyState from "../components/EmptyState";
+import LoadingSpinner from "../components/LoadingSpinner";
 import { useNavigate } from "react-router-dom";
 
 export default function Explore() {
-  const { posts } = useBlog();
+  const { posts: allContextPosts } = useBlog();
+  const navigate = useNavigate();
+
+  // Search & Filter State
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const navigate = useNavigate();
-  const postsPerPage = 10;
 
-  // Filter posts to show only published posts
-  const publishedPosts = useMemo(() => {
-    return posts.filter((post) => post.status === "published");
-  }, [posts]);
+  // Server data state
+  const [paginatedPosts, setPaginatedPosts] = useState<any[]>([]);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalResults, setTotalResults] = useState(0);
+  const [isServerLoading, setIsServerLoading] = useState(true);
 
-  // Extract all unique tags from published posts
+  // Debounced search query
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Extract all unique tags from published posts in context
   const allTags = useMemo(() => {
     const tagsSet = new Set<string>();
-    publishedPosts.forEach((post) => {
-      post.tags.forEach((tag) => tagsSet.add(tag));
-    });
+    allContextPosts
+      .filter((post) => post.status === "published")
+      .forEach((post) => {
+        post.tags.forEach((tag) => tagsSet.add(tag));
+      });
     return Array.from(tagsSet);
-  }, [publishedPosts]);
+  }, [allContextPosts]);
 
-  // Filter based on search query and tag selection
-  const filteredPosts = useMemo(() => {
-    return publishedPosts.filter((post) => {
-      const matchesSearch =
-        post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        post.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(1); // Reset page on new search
+    }, 400);
 
-      const matchesTag = selectedTag ? post.tags.includes(selectedTag) : true;
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-      return matchesSearch && matchesTag;
-    });
-  }, [publishedPosts, searchQuery, selectedTag]);
-
-  // Reset page when filter changes
-  useMemo(() => {
+  // Reset page when tag selection changes
+  useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedTag]);
+  }, [selectedTag]);
 
-  // Calculate paginated posts
-  const totalPages = Math.ceil(filteredPosts.length / postsPerPage);
-  const paginatedPosts = useMemo(() => {
-    const startIndex = (currentPage - 1) * postsPerPage;
-    return filteredPosts.slice(startIndex, startIndex + postsPerPage);
-  }, [filteredPosts, currentPage]);
+  // Fetch posts from backend when query, tag, or page changes
+  useEffect(() => {
+    const fetchExplorePosts = async () => {
+      try {
+        setIsServerLoading(true);
+        const data = await postApi.getPosts({
+          page: currentPage,
+          limit: 6, // 6 posts per page for better layout alignment
+          search: debouncedSearch,
+          tag: selectedTag || "",
+        });
+
+        setPaginatedPosts(data.posts);
+        setTotalPages(data.pagination.totalPages);
+        setTotalResults(data.pagination.total);
+      } catch (error) {
+        console.error("Failed to fetch explore posts from backend:", error);
+      } finally {
+        setIsServerLoading(false);
+      }
+    };
+
+    fetchExplorePosts();
+  }, [currentPage, debouncedSearch, selectedTag]);
 
   const handleClearFilters = () => {
     setSearchQuery("");
@@ -131,12 +154,12 @@ export default function Explore() {
           </div>
 
           {/* Search State Indicator */}
-          {(searchQuery || selectedTag) && (
+          {(debouncedSearch || selectedTag) && (
             <div className="flex items-center justify-between bg-indigo-50/50 dark:bg-indigo-950/20 px-4 py-2.5 rounded-xl border border-indigo-100/50 dark:border-indigo-900/30">
               <p className="text-xs font-medium text-slate-600 dark:text-slate-400">
-                Found <span className="font-bold text-indigo-600 dark:text-indigo-400">{filteredPosts.length}</span> results matching:{" "}
+                Found <span className="font-bold text-indigo-600 dark:text-indigo-400">{totalResults}</span> results matching:{" "}
                 <span className="italic">
-                  {selectedTag ? `[Tag: ${selectedTag}]` : ""} {searchQuery ? `"${searchQuery}"` : ""}
+                  {selectedTag ? `[Tag: ${selectedTag}]` : ""} {debouncedSearch ? `"${debouncedSearch}"` : ""}
                 </span>
               </p>
               <button
@@ -149,8 +172,12 @@ export default function Explore() {
           )}
 
           {/* Cards Grid Feed */}
-          {paginatedPosts.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {isServerLoading ? (
+            <div className="flex justify-center py-20">
+              <LoadingSpinner />
+            </div>
+          ) : paginatedPosts.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
               {paginatedPosts.map((post) => (
                 <BlogCard
                   key={post.id}
@@ -183,7 +210,7 @@ export default function Explore() {
           )}
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
+          {!isServerLoading && totalPages > 1 && (
             <div className="flex items-center justify-center pt-8 space-x-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

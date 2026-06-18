@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useBlog } from "../App";
-import { User, Eye, EyeOff, Lock, Mail, ArrowRight } from "lucide-react";
+import { authApi } from "../services/api";
+import { User as UserIcon, Eye, EyeOff, Lock, Mail, ArrowRight, Loader2 } from "lucide-react";
 
 export default function Signup() {
   const { login } = useBlog();
@@ -12,11 +13,13 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{
     name?: string;
     email?: string;
     password?: string;
     confirmPassword?: string;
+    general?: string;
   }>({});
 
   const validate = () => {
@@ -41,19 +44,31 @@ export default function Signup() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    // Simulate account registration: create mock user, log in, redirect
-    const newUser = {
-      id: `user-${Date.now()}`,
-      name: name.trim(),
-      email: email.toLowerCase(),
-    };
+    setIsLoading(true);
+    setErrors({});
 
-    login(newUser);
-    navigate("/dashboard");
+    try {
+      const response = await authApi.signup({
+        name: name.trim(),
+        email: email.toLowerCase(),
+        password,
+      });
+
+      login(response.user, response.token);
+      navigate("/dashboard");
+    } catch (error: any) {
+      console.error("Signup failed:", error);
+      const errMsg = error.response?.data?.error || "Registration failed. Please try again.";
+      setErrors({
+        general: errMsg,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -71,6 +86,12 @@ export default function Signup() {
           </p>
         </div>
 
+        {errors.general && (
+          <div className="p-3.5 text-xs font-semibold text-red-700 bg-red-50 dark:bg-red-950/20 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-xl">
+            {errors.general}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Name input */}
           <div className="space-y-1.5">
@@ -78,7 +99,7 @@ export default function Signup() {
               Full Name
             </label>
             <div className="relative">
-              <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <UserIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 placeholder="John Doe"
@@ -87,6 +108,7 @@ export default function Signup() {
                   setName(e.target.value);
                   setErrors((prev) => ({ ...prev, name: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.name
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -114,6 +136,7 @@ export default function Signup() {
                   setEmail(e.target.value);
                   setErrors((prev) => ({ ...prev, email: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.email
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -141,6 +164,7 @@ export default function Signup() {
                   setPassword(e.target.value);
                   setErrors((prev) => ({ ...prev, password: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-10 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.password
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -150,6 +174,7 @@ export default function Signup() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                disabled={isLoading}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -175,6 +200,7 @@ export default function Signup() {
                   setConfirmPassword(e.target.value);
                   setErrors((prev) => ({ ...prev, confirmPassword: undefined }));
                 }}
+                disabled={isLoading}
                 className={`w-full pl-10 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border rounded-xl text-sm outline-none transition-all ${
                   errors.confirmPassword
                     ? "border-red-500 focus:ring-2 focus:ring-red-500/20"
@@ -189,10 +215,20 @@ export default function Signup() {
 
           <button
             type="submit"
-            className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs cursor-pointer"
+            disabled={isLoading}
+            className="w-full flex items-center justify-center space-x-2 py-3 px-4 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>Create Account</span>
-            <ArrowRight className="w-4 h-4" />
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Creating Account...</span>
+              </>
+            ) : (
+              <>
+                <span>Create Account</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
           </button>
         </form>
 

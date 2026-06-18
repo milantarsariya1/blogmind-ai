@@ -1,31 +1,51 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useBlog } from "../App";
 import { Link } from "react-router-dom";
+import { postApi } from "../services/api";
 import { Plus, Edit3, Trash2, BookOpen, FileText, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatDate } from "../utils/formatDate";
 import EmptyState from "../components/EmptyState";
+import LoadingSpinner from "../components/LoadingSpinner";
 
 export default function Dashboard() {
-  const { posts, deletePost, currentUser } = useBlog();
+  const { deletePost, currentUser } = useBlog();
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const postsPerPage = 10;
 
-  // Filter posts to show ONLY the currently logged-in user's posts
-  const userPosts = useMemo(() => {
-    if (!currentUser) return [];
-    return posts.filter(
-      (p) => p.author.toLowerCase() === currentUser.name.toLowerCase()
-    );
-  }, [posts, currentUser]);
+  const fetchUserPosts = async () => {
+    try {
+      setIsLoading(true);
+      const posts = await postApi.getMyPosts();
+      setUserPosts(posts);
+    } catch (error) {
+      console.error("Failed to load user posts:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Fetch posts on mount
+  useEffect(() => {
+    fetchUserPosts();
+  }, []);
 
   // Calculate stats based on user's own posts
   const totalPosts = userPosts.length;
   const publishedPosts = userPosts.filter((p) => p.status === "published").length;
 
-  const handleDelete = (id: string, title: string) => {
+  const handleDelete = async (id: string, title: string) => {
     if (window.confirm(`Are you sure you want to delete "${title}"?`)) {
-      deletePost(id);
+      try {
+        await deletePost(id);
+        setUserPosts((prev) => prev.filter((post) => post.id !== id));
+      } catch (error) {
+        console.error("Failed to delete post:", error);
+        alert("Failed to delete the post. Please try again.");
+      }
     }
   };
 
@@ -36,13 +56,13 @@ export default function Dashboard() {
       return (
         post.title.toLowerCase().includes(query) ||
         post.author.toLowerCase().includes(query) ||
-        post.tags.some((t) => t.toLowerCase().includes(query))
+        post.tags.some((t: string) => t.toLowerCase().includes(query))
       );
     });
   }, [userPosts, searchQuery]);
 
   // Reset page when search changes
-  useMemo(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [searchQuery]);
 
@@ -78,7 +98,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Stat 1 */}
         <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 p-5 rounded-2xl flex items-center space-x-4">
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl animate-pulse">
+          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 rounded-xl">
             <BookOpen className="w-6 h-6" />
           </div>
           <div>
@@ -111,83 +131,89 @@ export default function Dashboard() {
       </div>
 
       {/* Table Section */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-3xl overflow-hidden shadow-xs">
-        {paginatedPosts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/80">
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Post Title</th>
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Author</th>
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Date</th>
-                  <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {paginatedPosts.map((post) => (
-                  <tr key={post.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/20 transition-colors">
-                    <td className="px-6 py-5 font-semibold text-slate-800 dark:text-slate-200 max-w-xs sm:max-w-sm truncate">
-                      {post.status === "published" ? (
-                        <Link to={`/post/${post.id}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
-                          {post.title}
-                        </Link>
-                      ) : (
-                        <span className="text-slate-500">{post.title}</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-5 text-sm font-medium text-slate-500 dark:text-slate-400">{post.author}</td>
-                    <td className="px-6 py-5 text-sm text-slate-500 dark:text-slate-400">{formatDate(post.createdAt)}</td>
-                    <td className="px-6 py-5 text-right text-sm">
-                      <div className="flex items-center justify-end space-x-1.5">
-                        <Link
-                          to={`/edit-post/${post.id}`}
-                          className="p-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
-                          title="Edit Post"
-                        >
-                          <Edit3 className="w-4.5 h-4.5" />
-                        </Link>
-                        <button
-                          onClick={() => handleDelete(post.id, post.title)}
-                          className="p-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
-                          title="Delete Post"
-                        >
-                          <Trash2 className="w-4.5 h-4.5" />
-                        </button>
-                      </div>
-                    </td>
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <LoadingSpinner />
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/60 rounded-3xl overflow-hidden shadow-xs">
+          {paginatedPosts.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200/60 dark:border-slate-800/80">
+                    <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Post Title</th>
+                    <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Author</th>
+                    <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400">Date</th>
+                    <th className="px-6 py-4.5 text-xs font-bold uppercase tracking-wider text-slate-400 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <EmptyState
-            title="No Posts Found"
-            description={searchQuery ? "No posts match your search query." : "You haven't written any posts yet. Get started by drafting your first blog post using our rich text editor."}
-            action={
-              !searchQuery ? (
-                <Link
-                  to="/create-post"
-                  className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Write Your First Post</span>
-                </Link>
-              ) : (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
-                >
-                  Clear Search Filter
-                </button>
-              )
-            }
-          />
-        )}
-      </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {paginatedPosts.map((post) => (
+                    <tr key={post.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-950/20 transition-colors">
+                      <td className="px-6 py-5 font-semibold text-slate-800 dark:text-slate-200 max-w-xs sm:max-w-sm truncate">
+                        {post.status === "published" ? (
+                          <Link to={`/post/${post.id}`} className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors">
+                            {post.title}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-500">{post.title}</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5 text-sm font-medium text-slate-500 dark:text-slate-400">{post.author}</td>
+                      <td className="px-6 py-5 text-sm text-slate-500 dark:text-slate-400">{formatDate(post.createdAt)}</td>
+                      <td className="px-6 py-5 text-right text-sm">
+                        <div className="flex items-center justify-end space-x-1.5">
+                          <Link
+                            to={`/edit-post/${post.id}`}
+                            className="p-2 text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+                            title="Edit Post"
+                          >
+                            <Edit3 className="w-4.5 h-4.5" />
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(post.id, post.title)}
+                            className="p-2 text-slate-500 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all cursor-pointer"
+                            title="Delete Post"
+                          >
+                            <Trash2 className="w-4.5 h-4.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState
+              title="No Posts Found"
+              description={searchQuery ? "No posts match your search query." : "You haven't written any posts yet. Get started by drafting your first blog post using our rich text editor."}
+              action={
+                !searchQuery ? (
+                  <Link
+                    to="/create-post"
+                    className="inline-flex items-center justify-center space-x-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Write Your First Post</span>
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="inline-flex items-center justify-center px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-xs transition-colors cursor-pointer"
+                  >
+                    Clear Search Filter
+                  </button>
+                )
+              }
+            />
+          )}
+        </div>
+      )}
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
+      {!isLoading && totalPages > 1 && (
         <div className="flex items-center justify-center pt-4 space-x-2">
           <button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}

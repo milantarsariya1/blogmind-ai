@@ -1,20 +1,21 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState, useEffect } from "react";
 import { BrowserRouter } from "react-router-dom";
 import type { BlogPost } from "./types/blog";
 import type { User } from "./types/user";
-import { useLocalStorage } from "./hooks/useLocalStorage";
-import { mockPosts } from "./data/mockPosts";
+import { postApi } from "./services/api";
 import AppRoutes from "./routes/AppRoutes";
 
 interface BlogContextType {
   posts: BlogPost[];
-  createPost: (post: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "views" | "readingTime">) => BlogPost;
-  updatePost: (id: string, updatedPost: Partial<BlogPost>) => void;
-  deletePost: (id: string) => void;
+  isLoading: boolean;
+  fetchPosts: () => Promise<void>;
+  createPost: (post: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "views" | "readingTime" | "author">) => Promise<BlogPost>;
+  updatePost: (id: string, updatedPost: Partial<BlogPost>) => Promise<BlogPost>;
+  deletePost: (id: string) => Promise<void>;
   currentUser: User | null;
-  login: (user: User) => void;
+  login: (user: User, token: string) => void;
   logout: () => void;
-  updateCurrentUser: (updatedFields: Partial<User>) => void;
+  updateCurrentUser: (user: User, token: string) => void;
 }
 
 const BlogContext = createContext<BlogContextType | undefined>(undefined);
@@ -28,85 +29,109 @@ export function useBlog() {
 }
 
 export default function App() {
-  // Restore posts from localStorage, fallback to mockPosts
-  const [posts, setPosts] = useLocalStorage<BlogPost[]>("blogmind_posts", mockPosts);
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   
   // Restore current user from localStorage
-  const [currentUser, setCurrentUser] = useLocalStorage<User | null>("blogmind_user", null);
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem("blogmind_user");
+    return saved ? JSON.parse(saved) : null;
+  });
 
-  const createPost = (newPostData: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "views" | "readingTime">) => {
-    const newId = `post-${Date.now()}`;
-    const nowStr = new Date().toISOString();
-    
-    // Estimate reading time from text content
-    const textOnly = newPostData.content.replace(/<[^>]*>/g, "");
-    const wordCount = textOnly.trim().split(/\s+/).filter(Boolean).length;
-    const estimatedTime = Math.ceil(wordCount / 200) || 1;
-
-    const fullPost: BlogPost = {
-      ...newPostData,
-      id: newId,
-      createdAt: nowStr,
-      updatedAt: nowStr,
-      views: 0,
-      readingTime: estimatedTime
-    };
-
-    setPosts((prevPosts) => [fullPost, ...prevPosts]);
-    return fullPost;
+  const fetchPosts = async () => {
+    try {
+      setIsLoading(true);
+      const data = await postApi.getPosts({ page: 1, limit: 100 });
+      setPosts(data.posts);
+    } catch (error) {
+      console.error("Failed to fetch posts from backend:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const updatePost = (id: string, updatedFields: Partial<BlogPost>) => {
-    const nowStr = new Date().toISOString();
-    
-    setPosts((prevPosts) =>
-      prevPosts.map((post) => {
-        if (post.id === id) {
-          const merged = { ...post, ...updatedFields, updatedAt: nowStr };
-          // If content changed, recalculate reading time
-          if (updatedFields.content !== undefined) {
-            const textOnly = updatedFields.content.replace(/<[^>]*>/g, "");
-            const wordCount = textOnly.trim().split(/\s+/).filter(Boolean).length;
-            merged.readingTime = Math.ceil(wordCount / 200) || 1;
-          }
-          return merged;
-        }
-        return post;
-      })
-    );
+  // Load posts initially
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const createPost = async (newPostData: Omit<BlogPost, "id" | "createdAt" | "updatedAt" | "views" | "readingTime" | "author">) => {
+    setIsLoading(true);
+    try {
+      const fullPost = await postApi.createPost(newPostData);
+      setPosts((prevPosts) => [fullPost, ...prevPosts]);
+      return fullPost;
+    } catch (error) {
+      console.error("Failed to create post:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const deletePost = (id: string) => {
-    setPosts((prevPosts) => prevPosts.filter((post) => post.id !== id));
+  const updatePost = async (id: string, updatedFields: Partial<BlogPost>) => {
+    setIsLoading(true);
+    try {
+      const updated = await postApi.updatePost(id, updatedFields);
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => (post.id === id ? updated : post))
+      );
+      return updated;
+    } catch (error) {
+      console.error("Failed to update post:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const login = (user: User) => {
+  const deletePost = async (id: string) => {
+    setIsLoading(true);
+    try {
+      await postApi.deletePost(id);
+      setPosts((prevPosts) => prevPosts.filter((post) => post.id !== id));
+    } catch (error) {
+      console.error("Failed to delete post:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const login = (user: User, token: string) => {
     setCurrentUser(user);
+    localStorage.setItem("blogmind_token", token);
+    localStorage.setItem("blogmind_user", JSON.stringify(user));
+  };
+
+  const updateCurrentUser = (user: User, token: string) => {
+    setCurrentUser(user);
+    localStorage.setItem("blogmind_token", token);
+    localStorage.setItem("blogmind_user", JSON.stringify(user));
   };
 
   const logout = () => {
     setCurrentUser(null);
-  };
-
-  const updateCurrentUser = (updatedFields: Partial<User>) => {
-    setCurrentUser((prev) => {
-      if (!prev) return null;
-      return { ...prev, ...updatedFields };
-    });
+    localStorage.removeItem("blogmind_token");
+    localStorage.removeItem("blogmind_user");
   };
 
   return (
     <BlogContext.Provider
-      value={{
-        posts,
-        createPost,
-        updatePost,
-        deletePost,
-        currentUser,
-        login,
-        logout,
-        updateCurrentUser,
-      }}
+      value={
+        {
+          posts,
+          isLoading,
+          fetchPosts,
+          createPost,
+          updatePost,
+          deletePost,
+          currentUser,
+          login,
+          logout,
+          updateCurrentUser,
+        } as any
+      }
     >
       <BrowserRouter>
         <AppRoutes />

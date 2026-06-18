@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useBlog } from "../App";
-import { User, Mail, Lock, CheckCircle, AlertCircle, Save, FileText } from "lucide-react";
+import { authApi } from "../services/api";
+import { User, Mail, Lock, CheckCircle, AlertCircle, Save, FileText, Loader2 } from "lucide-react";
 
 export default function Settings() {
   const { currentUser, updateCurrentUser } = useBlog();
@@ -14,6 +15,7 @@ export default function Settings() {
   
   const [successMsg, setSuccessMsg] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<{ name?: string; email?: string; password?: string }>({});
 
   const validate = () => {
@@ -36,36 +38,49 @@ export default function Settings() {
     return Object.keys(tempErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSuccessMsg("");
     setErrorMsg("");
     
     if (!validate()) return;
 
-    // Simulate saving settings details
-    updateCurrentUser({
-      name: name.trim(),
-      email: email.toLowerCase(),
-    });
-
-    if (newPassword) {
-      // Simulate password change
-      if (!currentPassword) {
-        setErrorMsg("Please enter your current password to set a new one.");
-        return;
-      }
+    if (newPassword && !currentPassword) {
+      setErrorMsg("Please enter your current password to set a new one.");
+      return;
     }
 
-    setSuccessMsg("Settings updated successfully!");
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmNewPassword("");
-    
-    // Clear notification after 4 seconds
-    setTimeout(() => {
-      setSuccessMsg("");
-    }, 4000);
+    try {
+      setIsLoading(true);
+      
+      const payload: any = {
+        name: name.trim(),
+        email: email.toLowerCase(),
+      };
+      
+      if (newPassword) {
+        payload.password = newPassword;
+      }
+
+      const response = await authApi.updateProfile(payload);
+      
+      updateCurrentUser(response.user, response.token);
+      setSuccessMsg("Settings updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      
+      // Clear notification after 4 seconds
+      setTimeout(() => {
+        setSuccessMsg("");
+      }, 4000);
+    } catch (error: any) {
+      console.error("Failed to update profile settings:", error);
+      const errMsg = error.response?.data?.error || "Failed to update profile settings. Try again.";
+      setErrorMsg(errMsg);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -104,7 +119,7 @@ export default function Settings() {
               </div>
               <Link
                 to="/dashboard"
-                className="w-full mt-2 flex items-center justify-center space-x-1.5 py-2 px-4 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/70 border border-indigo-200/20 dark:border-indigo-900/30 rounded-xl transition-all cursor-pointer text-center"
+                className="w-full mt-2 flex items-center justify-center space-x-1.5 py-2 px-4 text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-950/70 border border-indigo-200/20 dark:border-indigo-900/30 rounded-xl transition-all cursor-pointer text-center animate-in fade-in"
               >
                 <FileText className="w-3.5 h-3.5" />
                 <span>View My Posts</span>
@@ -146,6 +161,7 @@ export default function Settings() {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    disabled={isLoading}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-650 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-600/20 text-slate-700 dark:text-slate-200"
                     placeholder="Enter your name"
                   />
@@ -164,6 +180,7 @@ export default function Settings() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    disabled={isLoading}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-650 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-600/20 text-slate-700 dark:text-slate-200"
                     placeholder="you@example.com"
                   />
@@ -189,6 +206,7 @@ export default function Settings() {
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
+                    disabled={isLoading}
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-650 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-600/20 text-slate-700 dark:text-slate-200"
                     placeholder="Enter current password to set a new one"
                   />
@@ -207,6 +225,7 @@ export default function Settings() {
                       type="password"
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
+                      disabled={isLoading}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-650 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-600/20 text-slate-700 dark:text-slate-200"
                       placeholder="Minimum 6 chars"
                     />
@@ -224,6 +243,7 @@ export default function Settings() {
                       type="password"
                       value={confirmNewPassword}
                       onChange={(e) => setConfirmNewPassword(e.target.value)}
+                      disabled={isLoading}
                       className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus:border-indigo-650 rounded-xl text-sm outline-none transition-all focus:ring-2 focus:ring-indigo-600/20 text-slate-700 dark:text-slate-200"
                       placeholder="Confirm new password"
                     />
@@ -237,10 +257,20 @@ export default function Settings() {
             <div className="flex justify-end">
               <button
                 type="submit"
-                className="flex items-center space-x-2 px-6 py-3 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-xs transition-colors cursor-pointer"
+                disabled={isLoading}
+                className="flex items-center space-x-2 px-6 py-3 font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-2xl shadow-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-4.5 h-4.5" />
-                <span>Save Profile Changes</span>
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                    <span>Saving Changes...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4.5 h-4.5" />
+                    <span>Save Profile Changes</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
