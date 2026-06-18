@@ -58,10 +58,10 @@ async function main() {
         <p>The most important element of any article is its authentic human voice. AI should be used to refine and polish, not to dictate the tone. A successful article blends structured technical insights with personal anecdotes and genuine empathy.</p>
       `,
       featureImage: "https://images.unsplash.com/photo-1677442136019-21780efad99a?q=80&w=800",
-      tags: ",Artificial Intelligence,Writing,Productivity,",
+      tags: ["Artificial Intelligence", "Writing", "Productivity"],
       status: "published",
       views: 1420,
-      reportReasons: "",
+      reportReasons: [],
     },
   });
 
@@ -77,10 +77,10 @@ async function main() {
         <p>Previously, managing loading states and error feedback during API submissions required writing multiple useState variables. With the new action system, React handles the pending state automatically.</p>
       `,
       featureImage: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=800",
-      tags: ",React,JavaScript,Web Development,",
+      tags: ["React", "JavaScript", "Web Development"],
       status: "published",
       views: 954,
-      reportReasons: "",
+      reportReasons: [],
     },
   });
 
@@ -100,10 +100,10 @@ async function main() {
         </ul>
       `,
       featureImage: "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?q=80&w=800",
-      tags: ",UI Design,UX,Aesthetics,",
+      tags: ["UI Design", "UX", "Aesthetics"],
       status: "published",
       views: 1105,
-      reportReasons: "",
+      reportReasons: [],
     },
   });
 
