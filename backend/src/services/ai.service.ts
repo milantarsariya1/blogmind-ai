@@ -35,7 +35,7 @@ export async function generateSummary(content: string): Promise<string> {
           content: content,
         },
       ],
-      model: "llama3-8b-8192", // Use a fast, standard model
+      model: "llama-3.1-8b-instant", // Use a fast, standard model
       temperature: 0.5,
       max_tokens: 150,
     });
