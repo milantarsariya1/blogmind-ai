@@ -1,7 +1,7 @@
 import { Check } from "lucide-react";
 
 export const PREDEFINED_IMAGES = [
-  "https://images.unsplash.com/photo-1677442136019-21780efad99a?q=80&w=800", // AI
+  "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=800", // AI
   "https://images.unsplash.com/photo-1633356122544-f134324a6cee?q=80&w=800", // React
   "https://images.unsplash.com/photo-1507238691740-187a5b1d37b8?q=80&w=800", // Design
   "https://images.unsplash.com/photo-1498050108023-c5249f4df085?q=80&w=800", // Desk
