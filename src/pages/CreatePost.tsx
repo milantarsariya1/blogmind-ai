@@ -23,7 +23,8 @@ import {
   FileText,
   Send,
   ArrowLeft,
-  Loader2
+  Loader2,
+  Zap
 } from "lucide-react";
 
 export default function CreatePost() {
@@ -38,6 +39,7 @@ export default function CreatePost() {
   // Loader states
   const [isAiCorrecting, setIsAiCorrecting] = useState(false);
   const [isAiSummarizing, setIsAiSummarizing] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
@@ -111,6 +113,26 @@ export default function CreatePost() {
     setTimeout(() => setAiMessage(null), 4000);
   };
 
+  // AI Seed Data handler — picks a random topic, calls Groq, fills title + content + tags
+  const handleSeedData = async () => {
+    try {
+      setIsSeeding(true);
+      setAiMessage(null);
+      const seeded = await aiApi.seedPost();
+      setTitle(seeded.title);
+      editor.commands.setContent(seeded.content);
+      if (seeded.tags && seeded.tags.length > 0) {
+        setTags(seeded.tags);
+      }
+      triggerAiMessage("✨ Article seeded with AI content!");
+    } catch (error) {
+      console.error("AI seed failed:", error);
+      alert("AI seeding failed. Please try again.");
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
   const handleSave = async (status: "draft" | "published") => {
     if (!title.trim()) {
       alert("Please enter a title for your blog post.");
@@ -175,13 +197,31 @@ export default function CreatePost() {
       </button>
 
       {/* Editor Header */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-          Create New Article
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Draft your content, tag it, and leverage AI features to polish your writing.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+            Create New Article
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Draft your content, tag it, and leverage AI features to polish your writing.
+          </p>
+        </div>
+
+        {/* Seed with AI button */}
+        <button
+          type="button"
+          onClick={handleSeedData}
+          disabled={isSeeding || isSubmitting}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 shadow-md shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer shrink-0"
+          title="Auto-fill this form with a real AI-generated blog article for demo purposes"
+        >
+          {isSeeding ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Zap className="w-4 h-4" />
+          )}
+          <span>{isSeeding ? "Generating..." : "Seed with AI"}</span>
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

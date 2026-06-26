@@ -1,7 +1,7 @@
 import { Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthRequest } from "../middleware/auth.middleware";
-import { generateSummary, correctGrammar } from "../services/ai.service";
+import { generateSummary, correctGrammar, seedBlogPost } from "../services/ai.service";
 
 const aiSchema = z.object({
   content: z.string().min(1, "Content must not be empty"),
@@ -22,6 +22,15 @@ export async function correct(req: AuthRequest, res: Response, next: NextFunctio
     const validated = aiSchema.parse(req.body);
     const correctedText = await correctGrammar(validated.content);
     return res.json({ correctedText });
+  } catch (error) {
+    next(error);
+  }
+}
+
+export async function seedPost(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const seeded = await seedBlogPost();
+    return res.json(seeded);
   } catch (error) {
     next(error);
   }

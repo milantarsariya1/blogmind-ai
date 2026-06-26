@@ -104,6 +104,11 @@ export const aiApi = {
     const response = await api.post("/ai/correct", { content });
     return response.data;
   },
+
+  async seedPost(): Promise<{ title: string; content: string; tags: string[] }> {
+    const response = await api.post("/ai/seed");
+    return response.data;
+  },
 };
 
 export default api;
