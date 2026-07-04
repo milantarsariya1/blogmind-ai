@@ -83,7 +83,7 @@ export default function Signup() {
               <img
                 src="/logo.png"
                 alt="BlogMind AI Logo"
-                className="w-16 h-16 object-contain mix-blend-multiply dark:mix-blend-normal dark:bg-white dark:p-2 dark:rounded-2xl dark:shadow-xs hover:scale-105 transition-transform duration-200"
+                className="w-16 h-16 object-contain hover:scale-105 transition-transform duration-200"
               />
             </Link>
           </div>
