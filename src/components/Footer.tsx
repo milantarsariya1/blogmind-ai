@@ -7,7 +7,11 @@ export default function Footer() {
         {/* Logo Section */}
         <div className="flex items-center justify-center">
           <Link to="/" className="inline-flex items-center space-x-2.5">
-            <img src="/logo.png" alt="BlogMind AI Logo" className="w-8 h-8 object-contain" />
+            <img
+              src="/logo.png"
+              alt="BlogMind AI Logo"
+              className="w-8 h-8 object-contain mix-blend-multiply dark:mix-blend-normal dark:bg-white dark:p-1 dark:rounded-lg"
+            />
             <span className="bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 text-transparent bg-clip-text text-2xl font-extrabold tracking-tight">
               BlogMind AI
             </span>
