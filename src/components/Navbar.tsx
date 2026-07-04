@@ -41,7 +41,8 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-12">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <Link to="/" className="flex items-center space-x-2">
+            <Link to="/" className="flex items-center space-x-2.5">
+              <img src="/logo.png" alt="BlogMind AI Logo" className="w-8 h-8 object-contain" />
               <span className="bg-gradient-to-r from-indigo-600 to-violet-600 dark:from-indigo-400 dark:to-violet-400 text-transparent bg-clip-text text-xl font-extrabold tracking-tight">
                 BlogMind AI
               </span>

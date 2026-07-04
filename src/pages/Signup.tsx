@@ -77,13 +77,24 @@ export default function Signup() {
         {/* Decorative elements */}
         <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-bl-full pointer-events-none" />
 
-        <div className="space-y-2 text-center">
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Create Account
-          </h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Sign up to start sharing your thoughts with AI help
-          </p>
+        <div className="space-y-4 text-center">
+          <div className="flex justify-center">
+            <Link to="/">
+              <img
+                src="/logo.png"
+                alt="BlogMind AI Logo"
+                className="w-16 h-16 object-contain hover:scale-105 transition-transform duration-200"
+              />
+            </Link>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Create Account
+            </h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Sign up to start sharing your thoughts with AI help
+            </p>
+          </div>
         </div>
 
         {errors.general && (
