@@ -1,6 +1,4 @@
 import Groq from "groq-sdk";
-import { readFileSync } from "fs";
-import { join } from "path";
 
 const groqApiKey = process.env.GROQ_API_KEY;
 
@@ -85,11 +83,24 @@ export interface SeededPost {
   tags: string[];
 }
 
+// Seed topics embedded inline to avoid filesystem dependency in serverless deployments
+const SEED_TOPICS: string[] = [
+  "The future of AI in software development and how developers can stay ahead",
+  "Building scalable TypeScript applications with clean architecture patterns",
+  "Modern CSS techniques: glassmorphism, container queries, and advanced animations",
+  "Mastering React performance optimization: memoization, lazy loading, and profiling",
+  "The definitive guide to remote work productivity: habits, tools, and routines",
+  "Understanding Large Language Models: how transformers work under the hood",
+  "Node.js backend security best practices: authentication, rate limiting, and OWASP",
+  "Designing accessible web interfaces: ARIA, contrast, and keyboard navigation",
+  "The rise of edge computing and what it means for full-stack developers",
+  "Git workflows for teams: branching strategies, code reviews, and CI/CD pipelines",
+  "Prompt engineering mastery: techniques for better AI outputs in production",
+  "Database design patterns: when to use SQL vs NoSQL and how to scale both",
+];
+
 export async function seedBlogPost(): Promise<SeededPost> {
-  // Load topics and pick one at random
-  const topicsPath = join(__dirname, "../data/seedTopics.json");
-  const topics: string[] = JSON.parse(readFileSync(topicsPath, "utf-8"));
-  const topic = topics[Math.floor(Math.random() * topics.length)];
+  const topic = SEED_TOPICS[Math.floor(Math.random() * SEED_TOPICS.length)];
 
   if (!groqApiKey) {
     // Rich mock fallback for local dev without API key
