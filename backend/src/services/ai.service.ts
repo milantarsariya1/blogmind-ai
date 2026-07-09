@@ -2,16 +2,16 @@ import Groq from "groq-sdk";
 
 const groqApiKey = process.env.GROQ_API_KEY;
 
-// Lazy initialization of Groq Client
+// Lazy initialization of Groq Client — only created when key is available
 let groq: Groq | null = null;
 function getGroqClient(): Groq {
+  if (!groqApiKey) {
+    throw new Error(
+      "GROQ_API_KEY is not configured. Please add it to Vercel environment variables."
+    );
+  }
   if (!groq) {
-    if (!groqApiKey) {
-      console.warn("GROQ_API_KEY is not defined. AI features will run in mock mode.");
-    }
-    groq = new Groq({
-      apiKey: groqApiKey || "mock_key",
-    });
+    groq = new Groq({ apiKey: groqApiKey });
   }
   return groq;
 }
@@ -111,6 +111,7 @@ export async function seedBlogPost(): Promise<SeededPost> {
     };
   }
 
+  // Primary attempt: fast 8b model (low latency, fits Vercel 10s timeout)
   try {
     const client = getGroqClient();
     const chatCompletion = await client.chat.completions.create({
@@ -119,7 +120,7 @@ export async function seedBlogPost(): Promise<SeededPost> {
           role: "system",
           content: `You are a professional tech blogger. Generate a complete, engaging blog post as a strict JSON object with exactly these three keys:
 - "title": A compelling, specific article title (string, max 80 chars)
-- "content": A rich HTML body using <h2>, <p>, <ul>, <li>, <strong>, <blockquote>, and optionally <pre><code> blocks. Min 350 words.
+- "content": A rich HTML body using <h2>, <p>, <ul>, <li>, <strong>, <blockquote> tags. Aim for 300-400 words.
 - "tags": An array of 3 relevant topic tags (strings)
 
 Return ONLY the raw JSON object. No markdown, no backticks, no explanation.`,
@@ -129,9 +130,9 @@ Return ONLY the raw JSON object. No markdown, no backticks, no explanation.`,
           content: `Write a blog post about: ${topic}`,
         },
       ],
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       temperature: 0.75,
-      max_tokens: 1500,
+      max_tokens: 1200,
       response_format: { type: "json_object" },
     });
 
@@ -143,8 +144,41 @@ Return ONLY the raw JSON object. No markdown, no backticks, no explanation.`,
     }
 
     return parsed;
-  } catch (error: any) {
-    console.error("Error seeding blog post:", error);
-    throw new Error(`Failed to seed blog post: ${error.message}`, { cause: error });
+  } catch (primaryError: any) {
+    console.error("Primary model seed failed, trying fallback model:", primaryError.message);
+
+    // Fallback: try mixtral as secondary option
+    try {
+      const client = getGroqClient();
+      const fallbackCompletion = await client.chat.completions.create({
+        messages: [
+          {
+            role: "system",
+            content: `You are a tech blogger. Return a JSON object with keys: "title" (string), "content" (HTML string with h2/p/ul/li tags, ~250 words), "tags" (array of 3 strings). Return ONLY raw JSON.`,
+          },
+          {
+            role: "user",
+            content: `Write a blog post about: ${topic}`,
+          },
+        ],
+        model: "gemma2-9b-it",
+        temperature: 0.7,
+        max_tokens: 1000,
+        response_format: { type: "json_object" },
+      });
+
+      const fallbackRaw = fallbackCompletion.choices[0]?.message?.content?.trim() || "{}";
+      const fallbackParsed = JSON.parse(fallbackRaw) as SeededPost;
+
+      if (!fallbackParsed.title || !fallbackParsed.content) {
+        throw new Error("Fallback model also returned incomplete seed data.");
+      }
+
+      return fallbackParsed;
+    } catch (fallbackError: any) {
+      console.error("Fallback model also failed:", fallbackError.message);
+      const combinedMessage = `Primary: ${primaryError.message} | Fallback: ${fallbackError.message}`;
+      throw new Error(`Failed to seed blog post: ${combinedMessage}`);
+    }
   }
 }
