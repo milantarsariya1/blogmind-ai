@@ -5,11 +5,11 @@ import { AppError } from "../middleware/error.middleware";
 import { AuthRequest } from "../middleware/auth.middleware";
 
 const postCreateSchema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  content: z.string().min(10, "Content must be at least 10 characters"),
-  summary: z.string().min(5, "Summary must be at least 5 characters"),
-  featureImage: z.string().url("Must be a valid image URL"),
-  tags: z.array(z.string()),
+  title: z.string().min(1, "Title is required"),
+  content: z.string().min(1, "Content is required"),
+  summary: z.string().optional().default("No summary provided."),
+  featureImage: z.string().optional().default("https://images.unsplash.com/photo-1620712943543-bcc4688e7485?q=80&w=800"),
+  tags: z.array(z.string()).optional().default([]),
   status: z.enum(["draft", "published"]).default("draft"),
 });
 

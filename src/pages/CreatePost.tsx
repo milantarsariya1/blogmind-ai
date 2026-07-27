@@ -113,7 +113,7 @@ export default function CreatePost() {
     setTimeout(() => setAiMessage(null), 4000);
   };
 
-  // AI Seed Data handler — picks a random topic, calls Groq, fills title + content + tags
+  // AI Seed Data handler — picks a random topic, calls Groq, fills title + content + tags + summary
   const handleSeedData = async () => {
     try {
       setIsSeeding(true);
@@ -124,6 +124,13 @@ export default function CreatePost() {
       if (seeded.tags && seeded.tags.length > 0) {
         setTags(seeded.tags);
       }
+
+      // Auto-extract and set a clean summary from seeded content
+      const cleanText = seeded.content.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [cleanText];
+      const autoSummary = sentences.slice(0, 3).join(" ").trim() || cleanText.slice(0, 150);
+      setSummary(autoSummary);
+
       triggerAiMessage("✨ Article seeded with AI content!");
     } catch (error) {
       console.error("AI seed failed:", error);
@@ -142,16 +149,21 @@ export default function CreatePost() {
     const contentHtml = editor.getHTML();
     const textContent = editor.getText().trim();
     
-    const fallbackSummary = textContent && textContent !== "Start writing your next masterpiece here..."
-      ? (textContent.slice(0, 145) + (textContent.length > 145 ? "..." : ""))
-      : "No summary provided.";
+    const cleanText = textContent !== "Start writing your next masterpiece here..." ? textContent : "";
+    let autoSummary = summary.trim();
+    if (!autoSummary && cleanText) {
+      autoSummary = cleanText.length > 140 ? cleanText.slice(0, 140) + "..." : cleanText;
+    }
+    if (!autoSummary) {
+      autoSummary = "An insightful article sharing key concepts, best practices, and practical takeaways.";
+    }
 
     try {
       setIsSubmitting(true);
       
       await createPost({
         title: title.trim(),
-        summary: summary.trim() || fallbackSummary,
+        summary: autoSummary,
         content: contentHtml,
         featureImage,
         tags,
@@ -159,9 +171,19 @@ export default function CreatePost() {
       });
 
       navigate("/dashboard");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save post:", error);
-      alert("Failed to save the article. Please try again.");
+      const serverErr = error?.response?.data?.error;
+      const details = error?.response?.data?.details;
+      let errText = "Failed to save the article. Please try again.";
+      if (details && Array.isArray(details)) {
+        errText = details.map((d: any) => `${d.field}: ${d.message}`).join("\n");
+      } else if (serverErr) {
+        errText = serverErr;
+      } else if (error?.message) {
+        errText = error.message;
+      }
+      alert(`Failed to save post: ${errText}`);
     } finally {
       setIsSubmitting(false);
     }
